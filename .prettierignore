@@ -1,0 +1,8 @@
+/.vscode
+/node_modules
+./dist    
+# // kuch bhi distribution related bhi nhi karna
+
+*.env
+.env
+.env.*
