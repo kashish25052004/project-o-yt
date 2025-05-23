@@ -1,0 +1,1 @@
+// npm run dev -- > in package.json - >script -> nodemon src/index.js
