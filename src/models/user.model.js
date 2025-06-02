@@ -75,7 +75,7 @@ const userSchema = new Schema(
 //dont use arrow function here because we need to access the `this` keyword to get the user document
 userSchema.pre("save", async function (next) {
     if (this.isModified("password")) {
-        this.password = bcrypt.hash(this.password, 10) // Hash the password with a salt rounds of 10 
+        this.password = await bcrypt.hash(this.password, 10) // Hash the password with a salt rounds of 10 
     }
     next()
 })
