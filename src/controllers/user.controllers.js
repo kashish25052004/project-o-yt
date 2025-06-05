@@ -1,7 +1,7 @@
 import {asyncHandler} from "../utils/asyncHandler.js";
 import {ApiError} from "../utils/ApiErrors.js";
 import { User } from "../models/user.model.js";
-import { uploloadOncloudinary } from "../utils/cloudinary.js";
+import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import {ApiResponse} from "../utils/ApiResponse.js";
 
 const registerUser = asyncHandler(async (req, res) => {
@@ -30,7 +30,7 @@ const registerUser = asyncHandler(async (req, res) => {
     }
 
     //check if user already exists
-    const existingUser = User.findOne({ 
+    const existingUser = await User.findOne({ 
         $or: [
             { email}, // check by email
             { username } // check by username
@@ -49,14 +49,19 @@ const registerUser = asyncHandler(async (req, res) => {
    
     //upload them to local
     const avatarLocalPath = req.files?.avatar[0]?.path; // assuming multer stores the file path in req.files.avatar[0].path
-    const coverImageLocalPath = req.files?.coverImage[0]?.path; // assuming multer stores the file path in req.files.coverImage[0].path
+    // const coverImageLocalPath = req.files?.coverImage[0]?.path; // assuming multer stores the file path in req.files.coverImage[0].path // give undefined error when no cverimage is sent
+    
+    let coverImageLocalPath;
+    if(req.files && Array.isArray(req.files.coverImage) && req.files.coverImage.length >0){
+        coverImageLocalPath = req.files.coverImage[0].path;
+    }
     if (!avatarLocalPath) {
         throw new ApiError(400, "Avatar image is required");
     }
 
     //upload them to cloudinary-- third party service for image storage
-    const avatar = await uploloadOncloudinary(avatarLocalPath)
-    const coverImage = await uploloadOncloudinary(coverImageLocalPath) ;
+    const avatar = await uploadOnCloudinary(avatarLocalPath)
+    const coverImage = await uploadOnCloudinary(coverImageLocalPath) ;
     if(!avatar){
         throw new ApiError(400, " avatar image not found");
     }
@@ -65,7 +70,7 @@ const registerUser = asyncHandler(async (req, res) => {
     //create user object
 
     const user = await User.create({
-        fullname,
+        fullName,
         avatar: avatar.url, // cloudinary url
         coverImage: coverImage?.url || "", // cloudinary url
         email,

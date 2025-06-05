@@ -1,4 +1,4 @@
-import mongoose ,{Schema} from " mongoose";
+import mongoose ,{Schema} from "mongoose";
 
 import jwt from "jsonwebtoken" // used for generating JWT tokens --> visit jwt.io for more info
 import bcrypt from "bcrypt" // used for hashing passwords
@@ -44,7 +44,7 @@ const userSchema = new Schema(
 
         watchHistory: [
             {
-                type: Schema.Types.ObjectTd,
+                type: Schema.Types.ObjectId,
                 ref: "Video" // Reference to the Video model
 
 
