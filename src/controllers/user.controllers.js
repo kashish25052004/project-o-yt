@@ -3,6 +3,26 @@ import {ApiError} from "../utils/ApiErrors.js";
 import { User } from "../models/user.model.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import {ApiResponse} from "../utils/ApiResponse.js";
+import jwt from "jsonwebtoken";
+
+const generateAccessAndRefereshTokens = async(userId) => {
+    try{
+       const user =  await User.findById(userId)
+       const accessToken = user.generateAcessToken()
+       const refreshToken = user.generateRefreshToken()
+       //access token toh user ko dedete hai ,per refresh token hum database ko bhi dete hai 
+       //accesstoken short time ke liye hota hia, refresh long time ke liye
+       user.refreshToken = refreshToken; // store refresh token in user document
+       await user.save({validateBeforeSave: false })// skip validation for refreshToken field
+        return {accessToken, refreshToken} 
+
+
+    }catch(error){
+        throw new ApiError(500,"something went wrong while generating refresh and access token")
+
+    }
+
+}
 
 const registerUser = asyncHandler(async (req, res) => {
     // res.status(200).json({
@@ -23,6 +43,8 @@ const registerUser = asyncHandler(async (req, res) => {
     //get data from frontend
     const {fullName, email,username, password } = req.body;
     console.log("email : ", email);
+    console.log("username : ", username);
+    console.log("password : ", password);
 
     //validation
     if (!fullName || !email || !username || !password) {
@@ -36,6 +58,7 @@ const registerUser = asyncHandler(async (req, res) => {
             { username } // check by username
         ] 
     });
+    console.log("existingUser : ", existingUser);
 
     if(existingUser){
         throw new ApiError(409, "User already exists with this email or username");
@@ -97,6 +120,146 @@ const registerUser = asyncHandler(async (req, res) => {
 
 })
 
+const loginUser = asyncHandler(async(req,res) =>{
+    //req body se data lenge;
+    //username or email
+    //find the user
+    //password check
+    //backend sends access token and refresh token to user
+    //through sending cookie
 
-export {registerUser,}
+    const {email,username,password} = req.body
+    if(!username || !email){
+        if(!username && !email){
+            throw new ApiError(400,"username or email is required")
+        }
+
+        
+    }
+
+   const user =  await User.findOne({
+        $or:[{username}, {email}]
+    })
+
+    if(!user){
+        throw new ApiError(404,"user not exist")
+    }
+
+    //here we want userSchema--  so we use user instead of User
+    const isPasswordVaild = await user.isPasswordMatch(password)
+
+    if(!isPasswordVaild){
+        throw new ApiError(401,"invalid user credentials , password wrong")
+    }
+
+    const {accessToken, refreshToken} = await generateAccessAndRefereshTokens(user._id)
+
+    const loggedInUser = await User.findById(user._id).select("-password -refreshToken")
+
+    const options = {
+        httpsOnly: true,
+        secure: true,
+    }
+    //cookies ko by default koi bhi modify kar sakta hai -- frontend per but ye krne se ye cookies sirf server se modify hoti hai
+    return res.status(200)
+    .cookie("accessToken",accessToken, options) // key:value pair
+    .cookie("refreshToken", refreshToken,options) // key:value pair
+    .json(
+        new ApiResponse(200,{user:loggedInUser,accessToken,refreshToken},"user logged in successfully")
+         
+    )
+
+
+
+
+
+})
+
+const logoutUser = asyncHandler(async(req,res) => {
+    await User.findByIdAndUpdate(
+        req.user._id,
+        {
+            // mongo db operator 
+            $set:{
+                refreshToken:undefined // set refresh token to undefined
+            }
+        },
+        {
+            new: true, // return the updated user
+           
+        }
+    )
+
+     const options = {
+        httpsOnly: true,
+        secure: true,
+    }
+
+    return res.status(200)
+    .clearCookie("accessToken", options) // clear access token cookie
+    .clearCookie("refreshToken", options) // clear refresh token cookie 
+    .json(
+        new ApiResponse(200, {}, "User logged out successfully")
+    )
+
+
+
+
+
+})
+
+// refresh access token
+//for refresh the access token 
+//access token short time ke liye hota hai, refresh token long time ke liye hota hai
+// so we can use refresh token to get new access token
+const refreshAccessToken = asyncHandler(async(req,res) => {
+    const incomingRefreshToken = req.cookies.refreshToken || req.body.refreshToken; // get refresh token from cookies
+    if(!incomingRefreshToken){
+        throw new ApiError(401,"refresh token is required , unauthorized request")
+
+    }
+
+    try {
+        const decodeToken = jwt.verify(incomingRefreshToken,process.env.REFRESH_TOKEN_SECRET)
+    
+        const user  = await User.findById(decodeToken?._id)
+    
+        if(!user){
+            throw new ApiError(404,"user not found , please login again , Invalid refresh token")
+        }
+    
+        //match the incoming refresh token which is given by user with the one stored in database
+        if(user?.refreshToken !== incomingRefreshToken){
+            throw new ApiError(401,"Invalid refresh token, please login again, refresh token is expired or used")
+    
+        }
+    
+        //generate new access and refresh token
+        const options= {
+            httpsOnly: true,
+            secure: true,
+        }
+    
+        const {accessToken, newRefreshToken}=await generateAccessAndRefereshTokens(user._id)
+    
+        return res.status(200)
+        .cookie("accessToken", accessToken, options) // set new access token cookie
+        .cookie("refreshToken", newRefreshToken, options) // set new refresh token cookie  
+        .json(
+            new ApiResponse(
+                200, 
+                {accessToken, refreshToken:newRefreshToken},
+                "Access token refreshed successfully"
+            )
+    
+        )
+    } catch (error) {
+        throw new ApiError(401, error?.message || "Something went wrong while refreshing access token")
+        
+    }
+
+
+})
+
+export {registerUser,loginUser, logoutUser,refreshAccessToken} // export all functions so that we can use them in routes
 
