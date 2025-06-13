@@ -127,8 +127,9 @@ const loginUser = asyncHandler(async(req,res) =>{
     //password check
     //backend sends access token and refresh token to user
     //through sending cookie
-
+    console.log(req.body)
     const {email,username,password} = req.body
+
     if(!username || !email){
         if(!username && !email){
             throw new ApiError(400,"username or email is required")
@@ -261,5 +262,123 @@ const refreshAccessToken = asyncHandler(async(req,res) => {
 
 })
 
-export {registerUser,loginUser, logoutUser,refreshAccessToken} // export all functions so that we can use them in routes
+const changeCurrentPassword = asyncHandler(async(req,res) => {
+    // rout main hi jwt verify se pata laga lenge ki voh user already loged in hai ya nhi hai , ya cookies hai ya nhi -->vaha middle ware auth use hoga
+    const {oldPassword, newPassword} = req.body;
+
+
+    const user = await User.findById(req.user?._id)
+    const isPasswordCorrect = await user.isPasswordMatch(oldPassword)
+    if(!isPasswordCorrect){
+        throw new ApiError(400, "Old password is incorrect");
+    }
+
+    user.password = newPassword; // set new password
+    await user.save({validateBeforeSave: false}) // skip validation for password field
+    //baki ke validation main run nhi karna chahte hain, kyuki password ko hash karne ka kaam user model main hai
+
+    return res.status(200)
+    .json(new ApiResponse(200, {}, "Password changed successfully"))
+
+
+
+})
+
+const getCurrentUser = asyncHandler(async(req,res) => {
+    // get current user from req.user
+    return res.status(200)
+    .json(new ApiResponse(200, req.user, "Current user fetched successfully"))
+})
+
+//agar file update karna ho toh kabhi bhi ek sath mat karna alag se ushi file ko update karwana , sirf aur sirf ushi file ko
+const updateAccountDetails = asyncHandler(async(req,res)=>{
+    const {fullName , email} = req.body;
+    if(!fullName || !email){
+        throw new ApiError(400,"All fields are required")
+    }
+
+     const user= User.findByIdAndUpdate(
+        req.user?._id,
+        {
+            $set:{
+                fullName: fullName,
+                email: email
+            }
+        },
+        {new: true} // returns the updated user
+     ).select("-password")
+
+     return res
+     .status(200)
+     .json(new ApiResponse(200,user,"account details updated successfully"))
+
+})
+
+const updateUserAvatar = asyncHandler(async(req,res)=>{
+   //sirf ek file leni hai isiliye file
+    const avatarLocalPath = req.file?.path
+
+    if(!avatarLocalPath){
+        throw new ApiError(400,"avatar file is missing")
+
+    }
+
+   const avatar =  await uploadOnCloudinary(avatarLocalPath)
+   //avatar-->object
+   if(!avatar.url){
+    throw new ApiError(400,"error while uploading on avatar")
+
+   }
+
+   const user = await User.findByIdAndUpdate(
+    req.user?._id,
+    {
+        $set:{
+            avatar : avatar.url
+        }
+    },
+    {new:true}
+   ).select("-password")
+
+   return res.status(200)
+   .json(
+    new ApiResponse(200,user,"avatar image uploaded successfully")
+   )
+
+})
+
+const updateUserCoverImage = asyncHandler(async(req,res)=>{
+   //sirf ek file leni hai isiliye file
+    const coverImageLocalPath = req.file?.path
+
+    if(!coverImageLocalPath){
+        throw new ApiError(400,"coverimage file is missing")
+
+    }
+
+   const coverImage =  await uploadOnCloudinary(avatarLocalPath)
+   //avatar-->object
+   if(!coverImage.url){
+    throw new ApiError(400,"error while uploading on coverImage")
+
+   }
+
+   const user = await User.findByIdAndUpdate(
+    req.user?._id,
+    {
+        $set:{
+            coverImage : coverImage.url
+        }
+    },
+    {new:true}
+   ).select("-password")
+
+   return res.status(200)
+   .json(
+    new ApiResponse(200,user,"coverImage image uploaded successfully")
+   )
+
+})
+
+export {registerUser,loginUser, logoutUser,refreshAccessToken,changeCurrentPassword,getCurrentUser,updateAccountDetails,updateUserAvatar,updateUserCoverImage} // export all functions so that we can use them in routes
 
