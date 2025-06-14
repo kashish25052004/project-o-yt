@@ -297,7 +297,7 @@ const updateAccountDetails = asyncHandler(async(req,res)=>{
         throw new ApiError(400,"All fields are required")
     }
 
-     const user= User.findByIdAndUpdate(
+     const user= await User.findByIdAndUpdate(
         req.user?._id,
         {
             $set:{
@@ -380,5 +380,88 @@ const updateUserCoverImage = asyncHandler(async(req,res)=>{
 
 })
 
-export {registerUser,loginUser, logoutUser,refreshAccessToken,changeCurrentPassword,getCurrentUser,updateAccountDetails,updateUserAvatar,updateUserCoverImage} // export all functions so that we can use them in routes
+const getUserChannelProfile = asyncHandler(async(req,res)=>{
+    const {username} = req.params // url
+
+    if(!username?.trim()){
+        throw new ApiError(400,"username is missing!!")
+
+    }
+
+    const channel = await User.aggregate([
+        {
+            $match:{
+                username : username?.toLowerCase()
+            }
+        },
+
+        {
+            $lookup:{
+                from: "subscriptions", // mongo db main modle ka name lower case + plural main save hota hai
+                localField: "_id",
+                foreignField: "channel",
+                as: "subscribers" // is field main channel+subscriber dono ek doc main rahenge , aur bohot sare doc banenge
+            }
+        },
+
+        {
+            $lookup:{
+                from: "subscriptions", // mongo db main modle ka name lower case + plural main save hota hai
+                localField: "_id",
+                foreignField: "subscriber",
+                as: "subscriberedTo" // is field main channel+subscriber dono ek doc main rahenge , aur bohot sare doc banenge
+            }
+        },
+
+        { // voh jo profile hai uske andar feild add karwana hai
+            $addFields:{
+                subscribersCount:{
+                    $size : "$subscribers" // $ bcz -->subscribers bhi aab ek field hai
+                },
+
+                channelsSubscribedToCount: {
+                    $size: "$subscriberedTo"
+                },
+
+                isSubscribed: {
+                    $cond: {
+                        if: {$in:[req.user?._id,"$subscribers.subscriber"]},
+                        then: true,
+                        else: false 
+
+                    }
+                }
+            } 
+        },
+
+        {
+
+            $project:{
+                fullName:1,
+                username:1,
+                subscribersCount:1,
+                channelsSubscribedToCount:1,
+                email:1,
+                isSubscribed:1,
+                avatar:1,
+                coverImage:1
+            }
+
+        }
+    ]) //  gives array in which object is there
+
+    if(!channel?.length){
+        throw new ApiError(400 ,"channel does not exist"
+
+        )
+    }
+
+    return res.status(200)
+    .json(new ApiResponse(200,channel[0],"user Channel fetched successfully"))
+
+})
+
+
+
+export {registerUser,loginUser, logoutUser,refreshAccessToken,changeCurrentPassword,getCurrentUser,updateAccountDetails,updateUserAvatar,updateUserCoverImage,getUserChannelProfile} // export all functions so that we can use them in routes
 
