@@ -4,6 +4,7 @@ import { User } from "../models/user.model.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import {ApiResponse} from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken";
+import mongoose from "mongoose";
 
 const generateAccessAndRefereshTokens = async(userId) => {
     try{
@@ -435,6 +436,7 @@ const getUserChannelProfile = asyncHandler(async(req,res)=>{
         },
 
         {
+            // project ke undar --> hum voh likhnge jo humko return karna hai
 
             $project:{
                 fullName:1,
@@ -461,7 +463,65 @@ const getUserChannelProfile = asyncHandler(async(req,res)=>{
 
 })
 
+const getWatchHistory = asyncHandler(async(req,res) =>{
+    const user = await User.aggregate([
+        {
+            $match:{
+                _id: new mongoose.Types.ObjectId(req.user._id)
+
+            }
+        },
+
+        {
+            $lookup:{
+                 // aabhi tum user pr hoo 
+                 //yaha hum user model main watchHistory field ko video model main _id se match karte hai
+                from: "videos", // mongo db main modle ka name lower case + plural main save hota hai 
+                localField: "watchHistory", // user model main watchHistory field hai
+                foreignField: "_id", // video model main _id field hai
+                as: "watchHistoryVideos", // is field main watchHistory+videos dono ek doc main rahenge , aur bohot sare doc banenge
+                pipeline:[
+                    {
+                        $lookup:{
+                            //yaha hum video model main owner field ko user model main _id se match karte hai
+                            from: "users", // mongo db main modle ka name lower case + plural main save hota hai
+                            localField: "owner", // video model main owner field hai
+                            foreignField: "_id", // user model main _id field hai
+                            as: "owner", // is field main owner+user dono ek doc main rahenge , aur bohot sare doc banenge
+                            pipeline:[
+                                {
+                                    $project:{
+                                        fullName: 1,
+                                        username:1,
+                                        avatar:1
+                                    }
+                                }
+                            ]
 
 
-export {registerUser,loginUser, logoutUser,refreshAccessToken,changeCurrentPassword,getCurrentUser,updateAccountDetails,updateUserAvatar,updateUserCoverImage,getUserChannelProfile} // export all functions so that we can use them in routes
+                        }
+                    },
+                     
+                    // owner feild jo mili voh ek array main hai, usko hum first element se access karenge
+                    {
+                        $addFields:{
+                            owner:{
+                            $first: "$owner" // is used to get the first element of the array
+                            }
+                        }
+                    }
+                ]
+
+
+            }
+        }
+    ])
+
+    return res.status(200)
+    .json(new ApiResponse(200,user[0]?.watchHistoryVideos || [],"Watch history fetched successfully"))
+})
+
+
+
+export {registerUser,loginUser, logoutUser,refreshAccessToken,changeCurrentPassword,getCurrentUser,updateAccountDetails,updateUserAvatar,updateUserCoverImage,getUserChannelProfile,getWatchHistory} // export all functions so that we can use them in routes
 
